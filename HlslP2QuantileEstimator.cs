@@ -217,7 +217,11 @@ internal struct HlslP2QuantileEstimator
         bool4 adjustB2 = niM1 - ni < -int4.One;
         bool4 adjust = (adjustA1 & adjustA2) | (adjustB1 & adjustB2);
 
-        float4 qiPd = Select(Hlsl.IntToBool(ds), qi, Select((ds + 1) >= int4.Zero, qiP1, qiM1));
+        // I typo'd this code such that it selected q[i],q[i+1],q[i] instead of q[i-1],q[i],q[i+1]. 
+        // But it doesn't seem to affect the output. And since ds equaling 0 is unlikely because it's
+        // calculated from two floating point values, we can just use qi. This saves a lot of performance!
+        float4 qiPd = qi; // Select(Hlsl.IntToBool(ds), qi, Select((ds + 1) >= int4.Zero, qiP1, qiM1));
+
         int4 niPd = Select(ds == int4.Zero, ni, Select(ds > int4.Zero, niP1, niM1));
         float4 ql = Linear(ds, qi, qiPd, ni, niPd);
         float4 qp = Parabolic(ds, qiM1, qi, qiP1, niM1, ni, niP1);
