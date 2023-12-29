@@ -139,6 +139,8 @@ internal struct HlslP2QuantileEstimator
 
     private float4 GatherNS(int4 index)
     {
+        // aka return new float4(this.ns[index[0]], ..., this.ns[index[3]])
+
         int4 iPow2 = int4.One << index;
         return Hlsl.AsFloat(
                Hlsl.AsUInt(this.ns0) & LowBitAsBoolToMask(iPow2)
