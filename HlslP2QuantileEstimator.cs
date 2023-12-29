@@ -245,7 +245,8 @@ internal struct HlslP2QuantileEstimator
     }
 
     // We can't just multiply by 0f and 1f because (0*nan)==nan, which then breaks everything. So we use masking.
-    // TODO: Use ternary operator when possible https://github.com/Sergio0694/ComputeSharp/issues/735
+    // TODO: Use ?: ternary operator when possible https://github.com/Sergio0694/ComputeSharp/issues/735. This 
+    //       improves performance by 25%! (already tested in another branch).
     private static float4 Select(bool4 condition, float4 value1, float4 value2)
     {
         return Select(Hlsl.BoolToInt(condition), value1, value2);
