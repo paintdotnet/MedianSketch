@@ -220,7 +220,7 @@ internal struct HlslP2QuantileEstimator
         bool4 adjust = (adjustA1 & adjustA2) | (adjustB1 & adjustB2);
 
         // I typo'd this code such that it selected q[i],q[i+1],q[i] instead of q[i-1],q[i],q[i+1]. 
-        // But it doesn't seem to affect the output. And since ds equaling 0 is unlikely because it's
+        // But it doesn't seem to affect the output. And since ds equaling 0 is unlikely(?) because it's
         // calculated from two floating point values, we can just use qi. This saves a lot of performance!
         float4 qiPd = qi; // Select(Hlsl.IntToBool(ds), qi, Select((ds + 1) >= int4.Zero, qiP1, qiM1));
 
