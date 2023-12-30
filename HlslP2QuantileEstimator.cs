@@ -141,6 +141,9 @@ internal struct HlslP2QuantileEstimator
     {
         // aka return new float4(this.ns[index[0]], ..., this.ns[index[3]])
 
+        // This should be rewritten to use ?:, aka Hlsl.Select(), when upgraded to ComputeSharp 3.0
+        // This only runs once per pixel so it doesn't affect performance much; proper optimization
+        // effort should be focused on AddValueAfter5th() and its call graph.
         int4 iPow2 = int4.One << index;
         return Hlsl.AsFloat(
                Hlsl.AsUInt(this.ns0) & LowBitAsBoolToMask(iPow2)
@@ -222,10 +225,15 @@ internal struct HlslP2QuantileEstimator
         // I typo'd this code such that it selected q[i],q[i+1],q[i] instead of q[i-1],q[i],q[i+1]. 
         // But it doesn't seem to affect the output. And since ds equaling 0 is unlikely(?) because it's
         // calculated from two floating point values, we can just use qi. This saves a lot of performance!
-        float4 qiPd = qi; // Select(Hlsl.IntToBool(ds), qi, Select((ds + 1) >= int4.Zero, qiP1, qiM1));
+        // This is the wrong/typo'd code:
+        //     float4 qiPd = Select(Hlsl.IntToBool(ds), qi, Select((ds + 1) >= int4.Zero, qiP1, qiM1));
+        // This is the correct code:
+        //     float4 qiPd = Select(ds < int4.Zero, qiM1, Select(ds == int4.Zero, qi, qiP1));
+        // This is the "optimized" typo'd code that doesn't seem to affect the output and is obviously faster:
+        float4 qiPds = qi; // q[i + ds]
 
-        int4 niPd = Select(ds == int4.Zero, ni, Select(ds > int4.Zero, niP1, niM1));
-        float4 ql = Linear(ds, qi, qiPd, ni, niPd);
+        int4 niPds = Select(ds == int4.Zero, ni, Select(ds > int4.Zero, niP1, niM1)); // n[i + ds]
+        float4 ql = Linear(ds, qi, qiPds, ni, niPds);
         float4 qp = Parabolic(ds, qiM1, qi, qiP1, niM1, ni, niP1);
         float4 qOld = qi;
         float4 qNew = Select((qiM1 < qp) & (qp < qiP1), qp, ql);
@@ -247,8 +255,8 @@ internal struct HlslP2QuantileEstimator
     }
 
     // We can't just multiply by 0f and 1f because (0*nan)==nan, which then breaks everything. So we use masking.
-    // TODO: Use ?: ternary operator when possible https://github.com/Sergio0694/ComputeSharp/issues/735. This 
-    //       improves performance by 25%! (already tested in another branch).
+    // TODO: Use ?: ternary operator, aka Hlsl.Select() when possible https://github.com/Sergio0694/ComputeSharp/issues/735.
+    //       This improves performance by 25%! (already tested in another branch).
     private static float4 Select(bool4 condition, float4 value1, float4 value2)
     {
         return Select(Hlsl.BoolToInt(condition), value1, value2);
