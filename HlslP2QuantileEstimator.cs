@@ -214,7 +214,7 @@ internal struct HlslP2QuantileEstimator
     private void Adjust(out float4 qOut, out int4 nOut, int4 niM1, int4 ni, int4 niP1, float4 nsi, float4 qiM1, float4 qi, float4 qiP1)
     {
         float4 d = nsi - ni;
-        int4 ds = Hlsl.Sign(d); // -1, 0, +1
+        int4 di = Hlsl.Sign(d); // -1, 0, +1
 
         bool4 adjustA1 = d >= float4.One;
         bool4 adjustA2 = niP1 - ni > int4.One;
@@ -222,36 +222,36 @@ internal struct HlslP2QuantileEstimator
         bool4 adjustB2 = niM1 - ni < -int4.One;
         bool4 adjust = (adjustA1 & adjustA2) | (adjustB1 & adjustB2);
 
-        // I typo'd this code such that it selected q[i],q[i+1],q[i] instead of q[i-1],q[i],q[i+1]. 
-        // But it doesn't seem to affect the output. And since ds equaling 0 is unlikely(?) because it's
-        // calculated from two floating point values, we can just use qi. This saves a lot of performance!
-        // This is the wrong/typo'd code:
-        //     float4 qiPd = Select(Hlsl.IntToBool(ds), qi, Select((ds + 1) >= int4.Zero, qiP1, qiM1));
-        // This is the correct code:
-        //     float4 qiPd = Select(ds < int4.Zero, qiM1, Select(ds == int4.Zero, qi, qiP1));
-        // This is the "optimized" typo'd code that doesn't seem to affect the output and is obviously faster:
-        float4 qiPds = qi; // q[i + ds]
+        // This is the correct code, which uses di=[-1,0,+1] to select qi[i-1],q[i],q[i+1]:
+        //    float4 qiPdi = Select(di < int4.Zero, qiM1, Select(di == int4.Zero, qi, qiP1)); // q[i + di]
+        // This code is faster by assuming di=0 is rare:
+        float4 qiPdi = Select(di < int4.Zero, qiM1, qiP1);
 
-        int4 niPds = Select(ds == int4.Zero, ni, Select(ds > int4.Zero, niP1, niM1)); // n[i + ds]
-        float4 ql = Linear(ds, qi, qiPds, ni, niPds);
-        float4 qp = Parabolic(ds, qiM1, qi, qiP1, niM1, ni, niP1);
+        // This is the correct code, which uses di=[-1,0,+1] to select ni[i-1],ni[i],n[i+1]:
+        //    int4 niPdi = Select(di == int4.Zero, ni, Select(di > int4.Zero, niP1, niM1)); // n[i + di]
+        // This code is faster by assuming di=0 is rare or impossible, at least when needed for Linear(),
+        // and also avoids a division by zero in Linear() when di does equal 0:
+        int4 niPdi = Select(di < int4.Zero, niM1, niP1);
+
+        float4 ql = Linear(di, qi, qiPdi, ni, niPdi);
+        float4 qp = Parabolic(di, qiM1, qi, qiP1, niM1, ni, niP1);
         float4 qOld = qi;
         float4 qNew = Select((qiM1 < qp) & (qp < qiP1), qp, ql);
         qOut = Select(adjust, qNew, qOld);
 
-        nOut = ni + (Hlsl.BoolToInt(adjust) * ds);
+        nOut = ni + (Hlsl.BoolToInt(adjust) * di);
     }
 
-    private static float4 Parabolic(int4 ds, float4 qiM1, float4 qi, float4 qiP1, int4 niM1, int4 ni, int4 niP1)
+    private static float4 Parabolic(int4 di, float4 qiM1, float4 qi, float4 qiP1, int4 niM1, int4 ni, int4 niP1)
     {
-        return qi + ds / (float4)(niP1 - niM1) * (
-            (ni - niM1 + ds) * (qiP1 - qi) / (niP1 - ni) +
-            (niP1 - ni - ds) * (qi - qiM1) / (ni - niM1));
+        return qi + di / (float4)(niP1 - niM1) * (
+            (ni - niM1 + di) * (qiP1 - qi) / (niP1 - ni) +
+            (niP1 - ni - di) * (qi - qiM1) / (ni - niM1));
     }
 
-    private static float4 Linear(int4 ds, float4 qi, float4 qiPd, int4 ni, int4 niPd)
+    private static float4 Linear(int4 di, float4 qi, float4 qiPd, int4 ni, int4 niPd)
     {
-        return qi + ds * (qiPd - qi) / (niPd - ni);
+        return qi + di * (qiPd - qi) / (niPd - ni);
     }
 
     // We can't just multiply by 0f and 1f because (0*nan)==nan, which then breaks everything. So we use masking.
