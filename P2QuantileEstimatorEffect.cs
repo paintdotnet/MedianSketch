@@ -132,7 +132,7 @@ internal sealed partial class P2QuantileEstimatorEffect
         }
 
         [D2DInputCount(1)]
-        [D2DInputSimple(0)]
+        [D2DInputComplex(0)]
         [D2DInputDescription(0, D2D1Filter.MinMagMipLinear)]
         [AutoConstructor]
         private readonly partial struct P2QuantileEstimatorShader
